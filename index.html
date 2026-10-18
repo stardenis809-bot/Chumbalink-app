@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChumbaLink | Find Your Room</title>
+    
+    <!-- Hizi ni kwa ajili ya PWA (Kufanya iwe kama App) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f766e">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+        body { background-color: #f4f6f9; color: #333; display: flex; flex-direction: column; min-height: 100vh; }
+        
+        /* Header & Nav */
+        header { background-color: #0f766e; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; }
+        .logo { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 5px;}
+        .lang-btn { background: white; color: #0f766e; border: none; padding: 8px 15px; border-radius: 5px; font-weight: 600; cursor: pointer; }
+        
+        nav { background: white; padding: 15px 20px; display: flex; gap: 20px; overflow-x: auto; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        nav a { text-decoration: none; color: #0f766e; font-weight: 600; font-size: 14px; cursor: pointer; }
+
+        /* Hero Section */
+        .hero { background: linear-gradient(135deg, #0f766e, #14b8a6); padding: 40px 20px 60px; text-align: center; color: white; }
+        .hero h1 { font-size: 28px; margin-bottom: 10px; }
+        .hero p { font-size: 14px; opacity: 0.9; margin-bottom: 25px; }
+
+        /* Search Card */
+        .search-card { background: white; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 15px; max-width: 600px; margin: -40px auto 0; box-shadow: 0 10px 20px rgba(0,0,0,0.1); position: relative; z-index: 10; }
+        .search-row { display: flex; gap: 10px; }
+        .search-card input, .search-card select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+        .search-card button { background: #0f766e; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer; }
+
+        /* Listings Grid */
+        .listings-section { padding: 30px 20px; max-width: 1000px; margin: auto; flex: 1; /* Inasukumiza footer chini */ }
+        .listings-section h2 { margin-bottom: 20px; color: #1e293b; font-size: 22px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border-top: 5px solid #14b8a6; display: flex; flex-direction: column; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+        .card.pending { border-top-color: #f59e0b; }
+        .card.approved { border-top-color: #10b981; }
+        .card-img { width: 100%; height: 180px; object-fit: cover; background: #e2e8f0; }
+        .card-content { padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+        .card h3 { color: #1e293b; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .price { color: #dc2626; font-weight: 700; font-size: 20px; }
+        .location { color: #64748b; font-size: 13px; display: flex; align-items: center; gap: 5px; }
+        
+        .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 0 15px 15px 15px; }
+        .admin-actions button { flex: 1; min-width: 45%; padding: 8px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 12px; }
+        .btn-pay { background: #3b82f6; color: white; }
+        .btn-approve { background: #10b981; color: white; }
+        .btn-rented { background: #f59e0b; color: white; }
+        .btn-delete { background: #ef4444; color: white; }
+
+        /* Modals */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
+        .modal-content { background: white; border-radius: 12px; width: 95%; max-width: 600px; max-height: 90vh; overflow-y: auto; position: relative; animation: slideUp 0.3s ease-out; }
+        
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #eee; position: sticky; top: 0; background: white; z-index: 10; }
+        .modal-header h3 { color: #0f766e; font-size: 20px; }
+        .close-btn { background: none; border: none; font-size: 28px; cursor: pointer; color: #555; line-height: 1; }
+
+        /* Room Details Modal Specific */
+        .detail-img-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; padding: 15px; background: #f8fafc; }
+        .detail-img-container img { width: 100%; height: 250px; object-fit: cover; border-radius: 8px; scroll-snap-align: center; flex-shrink: 0; }
+        .detail-info { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .detail-badge { display: inline-block; background: #ccfbf1; color: #0f766e; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; width: max-content; }
+        .detail-price { font-size: 24px; font-weight: 700; color: #dc2626; }
+        .detail-desc { font-size: 15px; color: #475569; line-height: 1.6; }
+        
+        .wa-btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: #25D366; color: white; text-decoration: none; padding: 15px; border-radius: 8px; font-weight: 600; font-size: 16px; margin-top: 15px; }
+
+        /* Form Modals */
+        .form-body { padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: 600; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; }
+        .file-input-wrapper { border: 2px dashed #ccc; padding: 15px; text-align: center; border-radius: 8px; cursor: pointer; }
+        .submit-btn { width: 100%; background: #0f766e; color: white; padding: 15px; border: none; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer; margin-top: 10px; }
+
+        /* Loading */
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #0f766e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 40px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ==== MARQUEE YA JINA LAKO ==== */
+        footer { background-color: #0f766e; padding: 12px 0; overflow: hidden; position: relative; border-top: 4px solid #14b8a6; }
+        .marquee-container { width: 100%; white-space: nowrap; overflow: hidden; box-sizing: border-box; }
+        .marquee-text { 
+            display: inline-block; 
+            color: #ef4444; /* Rangi Nyekundu */
+            background-color: #ffffff; 
+            padding: 5px 20px; 
+            border-radius: 20px;
+            font-weight: 700; 
+            font-size: 14px; 
+            padding-left: 100%; 
+            animation: marquee 12s linear infinite; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        @keyframes marquee { 
+            0%   { transform: translate(0, 0); } 
+            100% { transform: translate(-100%, 0); } 
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="logo">🏠 ChumbaLink</div>
+        <button class="lang-btn" onclick="toggleLanguage()" id="btn-lang">English</button>
+    </header>
+
+    <!-- Navigation -->
+    <nav>
+        <a href="#" id="nav-home">Nyumbani</a>
+        <a href="#tafuta" id="nav-find">Tafuta Chumba</a>
+        <a href="#" onclick="openModal('tangazaModal')" id="nav-post">Tangaza Chumba</a>
+        <a href="#" onclick="openModal('loginModal')" id="nav-admin">Usimamizi</a>
+    </nav>
+
+    <!-- Hero & Search -->
+    <section class="hero" id="tafuta">
+        <h1 id="hero-title">Pata Chumba Chako Kirahisi</h1>
+        <p id="hero-desc">Jukwaa la kutafuta na kutangaza vyumba kwa wanachuo.</p>
+    </section>
+
+    <div class="search-card">
+        <div class="search-row">
+            <input type="text" id="search-area" placeholder="Eneo / Location">
+            <select id="search-price">
+                <option value="">Bei yoyote / Any price</option>
+                <option value="50000">Hadi TSh 50,000</option>
+                <option value="100000">Hadi TSh 100,000</option>
+                <option value="200000">Hadi TSh 200,000</option>
+            </select>
+        </div>
+        <button onclick="tafutaVyumba()" id="btn-search">Tafuta</button>
+    </div>
+
+    <!-- Listings -->
+    <section class="listings-section">
+        <h2 id="list-title">Vyumba Vilivyotangazwa</h2>
+        <div class="grid" id="vyumba-grid">
+            <div class="loader"></div>
+        </div>
+    </section>
+
+    <!-- Modal ya Maelezo ya Chumba (ROOM DETAILS) -->
+    <div class="modal" id="detailsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Maelezo ya Chumba</h3>
+                <button class="close-btn" onclick="closeModal('detailsModal')">&times;</button>
+            </div>
+            <div id="details-body">
+                <!-- Itajazwa na Javascript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal ya Kutangaza -->
+    <div class="modal" id="tangazaModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Tangaza Chumba</h3>
+                <button class="close-btn" onclick="closeModal('tangazaModal')">&times;</button>
+            </div>
+            <div class="form-body">
+                <form id="form-tangaza">
+                    <div class="form-group">
+                        <label>Jina la Chumba</label>
+                        <input type="text" id="title" placeholder="Mf: Chumba kimoja kizuri" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Bei (TSh kwa mwezi)</label>
+                        <input type="number" id="price" placeholder="Mf: 80000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mkoa</label>
+                        <input type="text" id="region" placeholder="Mf: Dar es Salaam" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Eneo</label>
+                        <input type="text" id="area" placeholder="Mf: Mbezi" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Chuo Kilicho Karibu (Kama kipo)</label>
+                        <input type="text" id="college" placeholder="Mf: MUCCOBS, SUA...">
+                    </div>
+                    <div class="form-group">
+                        <label>Namba ya WhatsApp (Anza na 255)</label>
+                        <input type="tel" id="phone" placeholder="Mf: 255712345678" required>
+                    </div>
+                    
+                    <label style="font-weight:600; font-size:14px; margin-bottom:5px; display:block;">Pakia Picha (Hadi 3)</label>
+                    <div class="form-group">
+                        <input type="file" id="img1" accept="image/*" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="file" id="img2" accept="image/*">
+                    </div>
+                    <div class="form-group">
+                        <input type="file" id="img3" accept="image/*">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Maelezo ya ziada</label>
+                        <textarea id="description" rows="3" placeholder="Maji, umeme, n.k."></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn" id="btn-tangaza">Tangaza Sasa</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal ya Admin Login -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Usimamizi (Admin)</h3>
+                <button class="close-btn" onclick="closeModal('loginModal')">&times;</button>
+            </div>
+            <div class="form-body">
+                <div class="form-group">
+                    <label>Weka Password yako</label>
+                    <input type="password" id="admin-pin" placeholder="Weka password...">
+                </div>
+                <button class="submit-btn" onclick="loginAdmin()">Ingia</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==== FOOTER YENYE JINA LAKO ==== -->
+    <footer>
+        <div class="marquee-container">
+            <div class="marquee-text">⭐ DEVELOPED BY SILVESTER DENIS ⭐</div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        // KUSajili Service Worker kwa ajili ya PWA (App)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker Imejisajili'))
+                .catch(err => console.log('Service Worker Haijajisajili', err));
+        }
+
+        const supabaseUrl = 'https://gyhetmlwpqwqkynaclbl.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5aGV0bWx3cHF3cWt5bmFjbGJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTcwNDcsImV4cCI6MjEwNzczMzA0N30.biET2bBPbtROkMnJvoHR2ezVg_FfcrHg-hX6Tx7uw3c';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        let isAdmin = false;
+        let currentLang = 'sw';
+        
+        const ADMIN_AIRTEL = '0685350832'; 
+        const ADMIN_YAS = '0656077745'; 
+        const COMMISSION_FEE = 5000;
+        
+        // PASSWORD MPYA YA ADMIN
+        const ADMIN_PASSWORD = "SHULE YA MSINGI TOWA";
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'sw' ? 'en' : 'sw';
+            document.getElementById('btn-lang').innerText = currentLang === 'sw' ? 'English' : 'Kiswahili';
+            
+            const sw = { navHome: "Nyumbani", navFind: "Tafuta Chumba", navPost: "Tangaza Chumba", navAdmin: "Usimamizi", heroTitle: "Pata Chumba Chako Kirahisi", heroDesc: "Jukwaa la kutafuta na kutangaza vyumba kwa wanachuo.", listTitle: "Vyumba Vilivyotangazwa", btnSearch: "Tafuta" };
+            const en = { navHome: "Home", navFind: "Find Room", navPost: "Post Room", navAdmin: "Admin", heroTitle: "Find Your Room Easily", heroDesc: "Platform to find and post rooms for students.", listTitle: "Posted Rooms", btnSearch: "Search" };
+            const dict = currentLang === 'sw' ? sw : en;
+
+            document.getElementById('nav-home').innerText = dict.navHome;
+            document.getElementById('nav-find').innerText = dict.navFind;
+            document.getElementById('nav-post').innerText = dict.navPost;
+            document.getElementById('nav-admin').innerText = dict.navAdmin;
+            document.getElementById('hero-title').innerText = dict.heroTitle;
+            document.getElementById('hero-desc').innerText = dict.heroDesc;
+            document.getElementById('list-title').innerText = isAdmin ? "Usimamizi: Vyumba Vyote" : dict.listTitle;
+            document.getElementById('btn-search').innerText = dict.btnSearch;
+            
+            tafutaVyumba(); 
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        // --- ADMIN LOGIN (PASSWORD MPYA) ---
+        function loginAdmin() {
+            const pass = document.getElementById('admin-pin').value;
+            // Tunaangalia kama password inafanana na "SHULE YA MSINGI TOWA"
+            if (pass === ADMIN_PASSWORD) { 
+                isAdmin = true;
+                closeModal('loginModal');
+                alert("Karibu Admin! Sasa unaweza kutuma chumba bure na kusimamia.");
+                document.getElementById('list-title').innerText = "Usimamizi: Vyumba Vyote";
+                tafutaVyumba();
+            } else {
+                alert("Password si sahihi! Kumbuka kuandika kwa herufi kubwa kama ilivyo.");
+            }
+        }
+
+        // --- KUVUTA VYUMBA (GRID) ---
+        async function tafutaVyumba() {
+            const eneo = document.getElementById('search-area').value;
+            const bei = document.getElementById('search-price').value;
+            const grid = document.getElementById('vyumba-grid');
+            
+            grid.innerHTML = '<div class="loader"></div>';
+
+            let query = supabaseClient.from('listings').select('*').order('created_at', { ascending: false });
+
+            if (!isAdmin) { query = query.eq('status', 'approved'); }
+            if (eneo) { query = query.ilike('area', `%${eneo}%`); }
+            if (bei) { query = query.lte('price', parseInt(bei)); }
+
+            const { data, error } = await query;
+
+            if (error) {
+                grid.innerHTML = `<p style="color: red; text-align:center; width: 100%;">Kosa: ${error.message}</p>`;
+                return;
+            }
+
+            if (data.length === 0) {
+                grid.innerHTML = '<p style="text-align: center; width: 100%; color:#777;">Hakuna vyumba vilivyopatikana.</p>';
+                return;
+            }
+
+            grid.innerHTML = '';
+            data.forEach(chumba => {
+                let cardClass = chumba.status === 'approved' ? 'approved' : 'pending';
+                let pichaUrl = chumba.image_url ? chumba.image_url : 'https://placehold.co/600x400?text=Hakuna+Picha';
+                let adminUI = '';
+
+                // Views Count
+                let viewsText = chumba.views ? `👁️ ${chumba.views} Views` : '👁️ 0 Views';
+
+                if (isAdmin) {
+                    let paymentText = chumba.payment_status === 'paid' ? '✅ Amelipa / Admin' : '❌ Hajalipa';
+                    let paymentColor = chumba.payment_status === 'paid' ? 'green' : 'red';
+                    
+                    adminUI = `
+                        <div style="padding: 0 15px; font-size: 12px; margin-bottom: 5px;">
+                            <p><strong>Hali:</strong> ${chumba.status.toUpperCase()} | <strong style="color:${paymentColor};">${paymentText}</strong></p>
+                        </div>
+                        <div class="admin-actions">
+                            ${chumba.payment_status !== 'paid' ? `<button class="btn-pay" onclick="badilishaMalipo('${chumba.id}', 'paid')">Amelipa</button>` : ''}
+                            ${chumba.status !== 'approved' ? `<button class="btn-approve" onclick="badilishaStatus('${chumba.id}', 'approved')">Idhinisha</button>` : ''}
+                            ${chumba.status === 'approved' ? `<button class="btn-rented" onclick="badilishaStatus('${chumba.id}', 'rented')">Chukuliwa</button>` : ''}
+                            <button class="btn-delete" onclick="futaChumba('${chumba.id}')">Futa</button>
+                        </div>
+                    `;
+                } else {
+                    if (chumba.status === 'rented' || chumba.status === 'pending') return;
+                }
+
+                grid.innerHTML += `
+                    <div class="card ${cardClass}" onclick="funguaMaelezo('${chumba.id}')">
+                        <img src="${pichaUrl}" class="card-img" alt="Picha ya chumba">
+                        <div class="card-content">
+                            <h3>${chumba.title}</h3>
+                            <p class="price">TSh ${Number(chumba.price).toLocaleString()} / mwezi</p>
+                            <p class="location">📍 ${chumba.area}, ${chumba.region}</p>
+                            ${chumba.college ? `<p class="location">🎓 Karibu na ${chumba.college}</p>` : ''}
+                            <p class="location" style="color: #0f766e; font-weight: 600; margin-top:5px;">${viewsText}</p>
+                        </div>
+                        ${adminUI}
+                    </div>
+                `;
+            });
+            
+            // Hifadhi data kwenye memory ili tuitumie kwenye Modal
+            window.vyumbaData = data;
+        }
+
+        // --- KUFUNGUA MAELEZO YA CHUMBA NA KUONGEZA VIEWS ---
+        async function funguaMaelezo(id) {
+            const chumba = window.vyumbaData.find(c => c.id === id);
+            if(!chumba) return;
+
+            // 1. Ongeza View kwenye database na screen papo hapo
+            let currentViews = chumba.views || 0;
+            chumba.views = currentViews + 1; // Update local memory
+            
+            // Update Database
+            supabaseClient.from('listings').update({ views: chumba.views }).eq('id', id).then();
+
+            // 2. Andaa UI ya Maelezo
+            let namba = chumba.phone || '255700000000';
+            if(namba.startsWith('0')) { namba = '255' + namba.substring(1); }
+            let ujumbe = encodeURIComponent(`Habari, nimeona tangazo la "${chumba.title}" kwenye ChumbaLink. Naomba maelezo zaidi.`);
+            let waLink = `https://wa.me/${namba}?text=${ujumbe}`;
+
+            let pichaZote = [];
+            if(chumba.image_url) pichaZote.push(chumba.image_url);
+            if(chumba.image2) pichaZote.push(chumba.image2);
+            if(chumba.image3) pichaZote.push(chumba.image3);
+
+            let pichaHtml = pichaZote.map(p => `<img src="${p}" alt="Picha">`).join('');
+            if(pichaZote.length === 0) pichaHtml = `<img src="https://placehold.co/600x400?text=Hakuna+Picha" alt="Picha">`;
+
+            let html = `
+                <div class="detail-img-container">
+                    ${pichaHtml}
+                </div>
+                <div class="detail-info">
+                    <h2>${chumba.title}</h2>
+                    <p class="detail-price">TSh ${Number(chumba.price).toLocaleString()} / mwezi</p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <span class="detail-badge">📍 ${chumba.area}, ${chumba.region}</span>
+                        ${chumba.college ? `<span class="detail-badge" style="background:#e0e7ff; color:#3730a3;">🎓 Karibu na ${chumba.college}</span>` : ''}
+                        <span class="detail-badge" style="background:#f1f5f9; color:#475569;">👁️ ${chumba.views} Views</span>
+                    </div>
+                    <p class="detail-desc">${chumba.description || 'Mtangazaji hakuweka maelezo ya ziada.'}</p>
+                    
+                    ${!isAdmin ? `
+                        <a href="${waLink}" target="_blank" class="wa-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                            Wasiliana na Mtangazaji
+                        </a>
+                    ` : ''}
+                </div>
+            `;
+            document.getElementById('details-body').innerHTML = html;
+            openModal('detailsModal');
+            
+            // Update the views count on the card behind the modal
+            tafutaVyumba(); 
+        }
+
+        // --- MABADILIKO YA ADMIN ---
+        async function badilishaStatus(id, statusMpya) {
+            event.stopPropagation(); 
+            const { error } = await supabaseClient.from('listings').update({ status: statusMpya }).eq('id', id);
+            if (error) alert("Kosa: " + error.message);
+            else tafutaVyumba();
+        }
+
+        async function badilishaMalipo(id, malipoMpya) {
+            event.stopPropagation();
+            const { error } = await supabaseClient.from('listings').update({ payment_status: malipoMpya }).eq('id', id);
+            if (error) alert("Kosa: " + error.message);
+            else tafutaVyumba();
+        }
+
+        async function futaChumba(id) {
+            event.stopPropagation();
+            if(confirm("Una uhakika unataka kufuta tangazo hili kabisa?")) {
+                const { error } = await supabaseClient.from('listings').delete().eq('id', id);
+                if (error) alert("Kosa: " + error.message);
+                else tafutaVyumba();
+            }
+        }
+
+        // --- KUTUMA FOMU NA PICHA NYINGI ---
+        document.getElementById('form-tangaza').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-tangaza');
+            btn.innerText = "Inatuma (Tafadhali subiri)...";
+            btn.disabled = true;
+
+            let urls = [];
+
+            async function uploadPicha(fileInputId) {
+                const fileInput = document.getElementById(fileInputId);
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name.replace(/\s/g, '_')}`;
+                    const { data, error } = await supabaseClient.storage.from('room-image').upload(fileName, file);
+                    if (error) throw new Error(error.message);
+                    
+                    const { data: publicUrlData } = supabaseClient.storage.from('room-image').getPublicUrl(fileName);
+                    return publicUrlData.publicUrl;
+                }
+                return null;
+            }
+
+            try {
+                const p1 = await uploadPicha('img1');
+                if(p1) urls.push(p1);
+                const p2 = await uploadPicha('img2');
+                if(p2) urls.push(p2);
+                const p3 = await uploadPicha('img3');
+                if(p3) urls.push(p3);
+
+                let statusMpya = isAdmin ? 'approved' : 'pending';
+                let malipoMpya = isAdmin ? 'paid' : 'unpaid';
+
+                const { error } = await supabaseClient.from('listings').insert([{
+                    title: document.getElementById('title').value,
+                    price: document.getElementById('price').value,
+                    region: document.getElementById('region').value,
+                    area: document.getElementById('area').value,
+                    college: document.getElementById('college').value,
+                    phone: document.getElementById('phone').value,
+                    description: document.getElementById('description').value,
+                    image_url: urls[0] || null,
+                    image2: urls[1] || null,
+                    image3: urls[2] || null,
+                    status: statusMpya,
+                    payment_status: malipoMpya,
+                    views: 0 // Anza na zero views
+                }]);
+
+                if (error) throw error;
+
+                if (isAdmin) {
+                    alert("Umefanikiwa kutuma chumba kama Admin! Kimeidhinishwa moja kwa moja.");
+                } else {
+                    alert(`Chumba kimepokelewa! Ili kionekane, tafadhali lipa kamisheni ya TSh ${COMMISSION_FEE.toLocaleString()} kwa Admin kupitia namba yoyote kati ya hizi:\n\n📱 Airtel: ${ADMIN_AIRTEL}\n📱 Yas (Tigo): ${ADMIN_YAS}\n\nBaada ya kulipa, wasiliana na Admin kupitia WhatsApp ili aidhinisha chumba chako.`);
+                }
+                document.getElementById('form-tangaza').reset();
+                closeModal('tangazaModal');
+                tafutaVyumba();
+
+            } catch (error) {
+                alert("Hitilafu: " + error.message);
+            } finally {
+                btn.innerText = "Tangaza Sasa";
+                btn.disabled = false;
+            }
+        });
+
+        tafutaVyumba();
+    </script>
+</body>
+</html>
